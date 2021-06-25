@@ -1,0 +1,58 @@
+/* Here you can type your JavaScript functions which you can use in HTML Editor. Press F1 for help. */
+<script src="JAC/gantt-master/dist/frappe-gantt.js"></script>
+
+
+
+//var addBtn= $('<input type="button" data-action="ADD" id="btn-gantt-Add" value="Add"></input>');
+var addOperation= $('<input type="button" data-action="ADD_OPERATION_LABOR" id="btn-gantt-Add-operation" value="Add Operation"></input>');
+var addJob= $('<input type="button" data-action="ADD_JOB_LABOR" id="btn-gantt-Add-job" value="Add Job"></input>');
+var deleteBtn= $('<input type="button" data-action="DELETE" id="btn-gantt-Delete" value="Delete"></input>');
+var editConfirm = $('<input type="button" data-action="EDIT" id="btn-gantt-Edit" value="Save"></input>')
+
+$(document).ready(function(){
+
+	//add legend for the Gantt Chart
+	var legend = `<div style="position: relative; bottom: 15px; font-size:12px">
+					<ul class="legend">
+					    <li><span class="shift"></span> Shift</li>
+					    <li><span class="operation"></span> Operation</li>
+					    <li><span class="job"></span> Job</li>
+					    <li><span class="break"></span> Break</li>
+					</ul>
+				 </div>`;
+	$('.jac-employee-list-grid .DynamicGrid .Right .SelectedDiv').append(legend);
+	
+	
+})
+
+function ganttChartBtnAction(btnAction)
+{
+		
+	ctx.outputs.Active = Active;
+	ctx.outputs.Action = btnAction;
+	ctx.outputs.ParentLaborBarID = ParentLaborBarID;
+	ctx.outputs.EmployeeName = EmployeeName;
+	ctx.outputs.LaborType = LaborType;
+	ctx.outputs.LaborLevel = LaborLevel;
+	ctx.outputs.ShiftStart = ShiftStart;
+	ctx.outputs.ShiftEnd = ShiftEnd;
+	ctx.outputs.OperationStartDate = OperationStartDate;
+	ctx.outputs.OperationEndDate = OperationEndDate;
+	ctx.outputs.StartDate = StartDate;
+	ctx.outputs.EndDate = EndDate;
+	ctx.outputs.WorkCenter = Operation;
+	ctx.outputs.SectionLeaderName = SectionLeaderName;
+	ctx.outputs.ParentStartDate = ParentStartDate;
+	ctx.outputs.ParentEndDate = ParentEndDate;
+	ctx.outputs.BarID = BarID;
+	
+	ctx.submit();
+}
+
+function createFixedDateHeader()
+{	
+	$('.container').prepend('<div class="fixed-date-bar">	<svg class="gantt custom-header" height="60" width="6240">	</svg><div>');
+	$( ".gantt .grid" ).clone().appendTo( ".gantt.custom-header" );
+	$( ".gantt .date" ).clone().appendTo( ".gantt.custom-header" );
+	$( ".fixed-date-bar" ).scrollLeft($('.gantt-container').scrollLeft() - $( ".gantt-left" ).width());
+}
