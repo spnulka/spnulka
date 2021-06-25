@@ -1,0 +1,439 @@
+<!-- Here you can layout standard UI elements using HTML and write your own HTML based screen. Press F1 for help. -->
+<!-- Tag selection: Ctrl+Shift+ArrowUp|ArrowDown or Ctrl+Shift+LMouseButton -->
+<!-- Snippets: Ctrl+Shift+Space or in|lit|bind|itr|itrc|fil|attr|key|adv|foc|... + Tab 
+<header>
+	<link rel="import" href="JAC/gantt-master/index.html">
+</header>
+-->
+<div class="container">
+	<div class="btn-toolbar" role="toolbar">
+        <div id="control-view" class="btn-group" role="group">
+	<!-- 	<button type="button" class="btn-minute btn">Minute</button> 
+			<button type="button" class="btn-hour btn">Hour</button>
+           <button type="button" class="btn-day btn">Day</button>-->
+        </div>
+    </div>
+	<div class="wrapper">
+		<svg class="gantt-left"></svg>
+		<svg class="gantt"></svg>
+	</div>	
+</div>
+
+
+  <script>
+ 
+ 	var ctx = $Context;
+	var EmployeeName;
+	var ParentLaborBarID;
+	var Operation;
+	var OperationStartDate;
+	var OperationEndDate;
+    var ShiftStart;
+	var ShiftEnd;
+	var StartDate;
+	var EndDate;
+	var ParentStartDate;
+	var ParentEndDate;
+	var SectionLeaderName;
+	var BarMode;
+	var gantt_chart;
+	var Active;
+	var adjusted_tasks = [];
+	var tmpStartDate;
+	var tmpEndDate;
+	var BarID;
+
+	var gantt;
+	
+
+	$(document).ready(function(){
+	
+		if ($Context.inputs.ViewMode == '')
+			$Context.inputs.ViewMode = 'Hour';
+		
+		var empGrid = $('.jac-employee-list-grid .DynamicGrid');
+		empGrid.dgAttachHandler('dataLoaded',function(){
+			
+			$('button[data-key="SAVE"]').off('click').on('click',function(){
+				$Context.outputs.Action = "SAVE";
+				//testing
+				$Context.outputs.LaborBarJSONList = [];
+				gantt_chart.tasks.forEach( function(every) {
+					$Context.outputs.LaborBarJSONList.push( JSON.stringify(every) )
+				});
+				//testing end
+				$Context.submit();
+			});
+			
+			var rows = empGrid.dgGetRows();
+			//for(var row in rows) {
+			for(var i = 0; i < rows.length;i++) {
+
+				//var addButton = $(row).find('button[data-field="addshiftorbreak"]');
+				var addButton = $(rows[i]).find('button[data-field="addshiftorbreak"]');
+				
+				addButton.off('click').on('click',function(){
+					$Context.outputs.GridEmployeeID = empGrid.dgGetExternal($(this).closest("tr[data-key]").attr("data-key"),'EMPLOYEEID');
+					$Context.outputs.Action = "ADDSHIFTORBREAK";
+					$Context.submit();
+				});
+				
+				var rowEmplID = empGrid.dgGetExternal(rows[i],'EMPLOYEEID');
+				if($Context.inputs.EmployeeIDList.some(x => x == rowEmplID)){
+					$(addButton).removeAttr('disabled');
+				}
+				else{
+					$(addButton).attr('disabled','disabled');
+				}
+			}	
+		});
+
+		var tasks = [];
+
+	  	$Context.inputs.LaborBarJSONList.forEach(function(task) {
+			tasks.push( JSON.parse(task) );
+		});	
+
+		gantt_chart = new Gantt(".gantt-left", ".gantt", tasks, {
+			date_format: 'MM/DD/YYYY hh:mm',
+			on_click: function (task) {
+				
+								
+				BarMode = task.custom_class.replace(/\s/g, '');
+		
+				var barData = getBarData(tasks, task, BarMode);
+				
+				//console.log(task)
+				$('input#input-edit-start').val(barData.StartDate);
+				$('input#input-edit-end').val(barData.EndDate);
+								
+				EmployeeName = task.EmployeeName;
+				Active = task.Active;
+				SectionLeaderName = barData.SectionLeader;
+				LaborType = barData.LaborType;	
+				LaborLevel = getLaborLevel(BarMode);
+				BarID = task.id
+				Operation = barData.Operation;
+				ShiftStart = barData.ShiftStart;
+				ShiftEnd = barData.ShiftEnd;
+				StartDate = barData.StartDate;
+				EndDate = barData.EndDate;
+				ParentStartDate = barData.ParentStart;
+				ParentEndDate = barData.ParentEnd;
+				OperationStart = barData.OperationStart;
+				OperationEnd = barData.OperationEnd;
+				ParentLaborBarID = task.id;	
+				
+				if(task.custom_class.indexOf('bar_actual') != -1){
+					$('input#input-edit-start, input#input-edit-end')
+				}
+			},
+			on_date_change: function(task, start, end) {
+				//set new start and end bar
+				//PR - changed date format 
+				//we need to remain consistent in date formatting as we lose the AM/PM info that way
+				task.start = (task._start).format('MM/dd/yyyy hh:mm');
+				task.end = (task._end).format('MM/dd/yyyy hh:mm');
+				
+				//set start_modified and end_modified values
+				var modifiedFlag = setStartEndModified(task.start_initial, task.start, task.end_initial, task.end);
+				task.start_modified = modifiedFlag.start_modified;
+				task.end_modified = modifiedFlag.end_modified;
+				
+				ctx.outputs.LaborBarJSONList = [];
+				gantt_chart.tasks.forEach( function(every) {
+					ctx.outputs.LaborBarJSONList.push( JSON.stringify(every) )
+				});
+			},
+			on_progress_change: function(task, progress) {
+				console.log(task, progress);
+			},
+			/*on_view_change: function(mode) {
+				$Context.outputs.ViewMode = mode;
+				console.log(mode);
+			}*/
+			on_view_change: function(mode) {
+				$Context.outputs.ViewMode = mode;
+				var bars = document.querySelectorAll(".gantt .bar_actual .bar-group");
+				for (var i = 0; i < bars.length; i++) {
+					bars[i].addEventListener("mousedown", stopEvent, true);
+				}
+				var handles = document.querySelectorAll(".gantt .bar_actual .handle-group");
+				for (var i = 0; i < handles.length; i++) {
+					handles[i].remove();
+				}
+			},
+		
+			view_mode: $Context.inputs.ViewMode,
+			language: 'en'
+		});	
+		
+		$(".btn-minute").on('click',function() {
+		   	gantt_chart.change_view_mode('Minute');
+		});
+		
+		$(".btn-hour").on('click',function() {
+		   	gantt_chart.change_view_mode('Hour');
+		});
+		
+		$(".btn-day").on('click',function() {
+		   	gantt_chart.change_view_mode('Day');
+		});
+		
+		//set LaborBarJSONList Output
+		gantt_chart.tasks.forEach( function(every) {
+			ctx.outputs.LaborBarJSONList.push( JSON.stringify(every) );
+		});
+			
+		$('g.bar-wrapper').click(function() {
+			$('input#btn-gantt-Add-operation').remove();
+			$('input#btn-gantt-Add-job').remove();
+			$('input#btn-gantt-Delete').remove();
+		
+			if($('g.bar-wrapper.active').find('.bar-deleted').length > 0 || $(this).hasClass('bar_actual')){
+				$(this).find('input#btn-gantt-Edit').remove();
+				$(this).find('div.contextMenu').remove();
+				$(this).find('input#input-edit-start').prop( "disabled", true );
+				$(this).find('input#input-edit-end').prop( "disabled", true );
+				$('input#input-edit-start, input#input-edit-end').css({'opacity':'0.9','pointer-events':'none'});
+				return;
+			}
+			
+			else {
+				editConfirm.appendTo('div.btn-edit-confirm')
+				//Add buttons to the context popup	
+				if (BarMode == 'bar_shift') {
+	            	addOperation.appendTo('div.contextMenu');
+				}	
+				if (BarMode == 'bar_operation') {
+	            	addJob.appendTo('div.contextMenu');
+				}
+				if (BarMode == 'bar_job') {
+				}
+				
+				//Add Delete button to the context popup for the jlast active bars
+				if($('g.bar-wrapper.active').find('.last_active_task').length > 0){
+					deleteBtn.appendTo('div.contextMenu');				
+				}
+		
+			}
+			//find BarID			
+			var BarID = $(this).find('g[data-id]')
+			
+			//Edit Action
+			$('div.editMenu input').click(function() {	
+
+				if ($(this).attr('data-action') == 'EDIT'){
+					ctx.outputs.LaborBarJSONList = [];		
+					gantt_chart.tasks.forEach( function(task) {
+					
+						ctx.outputs.LaborBarJSONList.push( JSON.stringify(task) )
+						
+						if (task.id == $('g.bar-wrapper.active').attr('data-id') ) {
+							task.start = $('input#input-edit-start').val();
+							task.end = $('input#input-edit-end').val();
+							
+							//set external outputs 
+							StartDate = task.start;
+							EndDate = task.end;
+							BarID = task.id;
+						}	
+						
+						var modifiedFlag = setStartEndModified(task.start_initial, task.start, task.end_initial, task.end);
+						task.start_modified = modifiedFlag.start_modified;
+						task.end_modified = modifiedFlag.end_modified;
+						
+						ctx.outputs.LaborBarJSONList_Edited.push( JSON.stringify(task) )
+					
+					});
+					ganttChartBtnAction($(this).attr('data-action'));
+				
+				}	
+			});	
+			
+			//Context Menu Action
+			$('div.contextMenu input').click(function() {	
+				
+				//Delete Action
+				if ($(this).attr('data-action') == 'DELETE'){
+					ctx.outputs.LaborBarJSONList = [];	
+					gantt_chart.tasks.forEach( function(task) {
+						
+						if (task.id == $('g.bar-wrapper.active').attr('data-id') ) {
+							$('g.bar-wrapper.active').find('.bar').addClass('bar-deleted');
+							task.Active = 0;
+						}	
+						ctx.outputs.LaborBarJSONList.push( JSON.stringify(task) )
+					});
+				}	
+				
+				ganttChartBtnAction($(this).attr('data-action'));								
+				
+			});	
+        });
+		
+		createFixedDateHeader();
+	});
+	
+	
+	function getBarData(tasks, task, BarMode){
+
+		var rootTask = findRootBarID(tasks, task.dependencies[0]);
+		var parentTask = findParentBarID(tasks, task.dependencies[0]);
+		var SectionLeader;
+		var LaborType
+		var tmp_task;
+	
+    	Operation = task.name;
+        OperationStartDate = task.start;
+		OperationEndDate= task.end;
+		
+		StartDate = task.start;
+		EndDate = task.end;
+		ParentStart = parentTask.start;
+		ParentEnd = parentTask.end;
+		
+		console.log(rootTask);
+		
+		if( rootTask === 0 || rootTask === -1){
+		    ShiftStart = task.start;
+			ShiftEnd = task.end;
+			tmp_task = task;
+			console.log(task.Details);
+			LaborType = getLaborTypeCode(task.Details);
+		}
+        else {
+	        ShiftStart = rootTask.start;
+			ShiftEnd = rootTask.end;
+			
+			tmp_task = rootTask;
+			console.log(rootTask.Details);
+			LaborType = getLaborTypeCode(rootTask.Details);
+        }
+		
+		console.log(tmp_task)
+		
+		SectionLeader = tmp_task.Details.substring(tmp_task.Details.indexOf("Section Leader:")+16, tmp_task.Details.indexOf("\n"));
+	
+		return {
+			Operation, 
+			OperationStartDate, 
+			OperationEndDate, 
+			ShiftStart,
+			ShiftEnd, 
+			SectionLeader, 
+			StartDate, 
+			EndDate, 
+			LaborType,
+			ParentStart, 
+			ParentEnd
+		}
+	}
+	
+	function getLaborTypeCode(BarDetails){
+	
+		const LaborTypeDesc = BarDetails.substring(BarDetails.indexOf('LaborType:') + 11, BarDetails.lastIndexOf("\n"));	
+		if(LaborTypeDesc == "Regular") {
+            LaborType = 1;
+        }
+        else if(LaborTypeDesc == "Rerun"){
+            LaborType = 2;
+        }
+        else if(LaborTypeDesc == "Rework"){
+            LaborType = 3;
+        }
+        else if(LaborTypeDesc == "Break"){
+            LaborType = 4;
+		}
+		else {
+			LaborType = 0;
+		}
+		
+		return LaborType;
+		
+	}
+	
+	function getLaborLevel(BarMode){
+		console.log(BarMode)
+	
+		if(BarMode == "bar_shift") {
+            LaborLevel = 1;
+        }
+        else if(BarMode == "bar_operation"){
+            LaborLevel = 2;
+        }
+        else if(BarMode == "bar_job"){
+            LaborLevel = 3;
+        }
+		else {
+			LaborLevel = 0;
+		}
+		
+		return LaborLevel;
+		
+	}
+	
+	
+	function findRootBarID(tasks , parentID, count=0, len=0) {		
+		if(len < tasks.length)
+		{
+			if(Array.isArray(tasks[len]))
+			{
+				return findRootBarID(tasks[len], parentID, count, 0)
+			}
+			if(tasks[len].id === parentID)
+			{
+				if(tasks[len].dependencies.length === 0)
+				{
+					return tasks[len];		
+				}
+				else 
+		       		return findRootBarID(tasks, tasks[len].dependencies[0], --count, --len);
+		    };
+			return findRootBarID(tasks, parentID, count, ++len);
+		};
+		return count;
+	}
+	
+	function findParentBarID(tasks , parentID, count=0, len=0) {		
+		if(len < tasks.length)
+		{			
+			if(tasks[len].id === parentID)
+			{
+				return tasks[len];		
+		    };
+			return findParentBarID(tasks, parentID, count, ++len);
+		};
+		return count;
+	}
+	
+	function setStartEndModified(OldStartDate, NewStartDate, OldEndDate, NewEndDate){
+	
+		var start_modified = 0;
+		var end_modified = 0;
+	
+		if (OldStartDate > NewStartDate){
+			start_modified = -1;
+		} else if ( OldStartDate < NewStartDate){
+			start_modified = 1;
+		}
+
+		if ( OldEndDate > NewEndDate ){
+			end_modified = -1;
+		} else if ( OldEndDate < NewEndDate ){
+			end_modified = 1;
+		}
+		
+		return {
+			start_modified, 
+			end_modified
+		}
+	}
+	
+	function stopEvent(event) {
+		event.preventDefault();
+		event.stopPropagation();
+	}
+
+</script>
+
